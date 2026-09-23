@@ -1,0 +1,3 @@
+-e .[inference]
+sam3 @ git+https://github.com/facebookresearch/sam3.git@2345a4ad109ac29c569da749c91d84f10dc08c40
+llava @ git+https://github.com/LLaVA-VL/LLaVA-NeXT.git@bce12e479bc4dfee2b9c50c88137b01ff51bd483
