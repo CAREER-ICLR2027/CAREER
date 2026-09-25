@@ -53,7 +53,7 @@ def test_exact_geometry_merge_preserves_only_tree_edges_and_visit_history():
     assert pool["overlap"].children == ()
 
 
-def test_sam_screening_encloses_every_detection_for_each_phrase():
+def test_sam_candidates_preserve_each_detected_instance():
     class Localizer:
         def encode(self, image):
             return np.ones((2, 20, 20))
@@ -65,9 +65,9 @@ def test_sam_screening_encloses_every_detection_for_each_phrase():
     config = SimpleNamespace(edge_size=(32, 32), edge_interpolation="bilinear")
     front = CandidateFrontend(Localizer(), clip, config)
     candidates = front.initial_candidates(Image.new("RGB", (100, 100)), ["luggage"], "Where is the luggage?")
-    assert candidates[0].box == (0, 0, 30, 20)
-    assert len(candidates[0].localization.boxes) == 2
-    assert candidates[0].sam_prompt == "luggage"
+    assert [candidate.box for candidate in candidates] == [(0, 0, 10, 10), (20, 10, 10, 10)]
+    assert [candidate.localization.scores for candidate in candidates] == [(.6,), (.95,)]
+    assert all(candidate.sam_prompt == "luggage" for candidate in candidates)
 
 
 def test_clip_averages_normalized_text_embeddings_then_normalizes_the_mean():

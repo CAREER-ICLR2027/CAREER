@@ -7,7 +7,7 @@ import math
 import numpy as np
 from PIL import Image
 
-from .types import Candidate, Localization, clip_box, enclose
+from .types import Candidate, Localization, clip_box
 
 
 def image_key(image):
@@ -200,10 +200,11 @@ class CandidateFrontend:
         candidates = []
         for index, phrase in enumerate(phrases):
             detections = self.localize(image, phrase)
-            if detections.boxes:
-                candidates.append(Candidate(f"sam{index:04d}", enclose(detections.boxes),
+            for detection_index, box in enumerate(detections.boxes):
+                localization = Localization((box,), detections.scores[detection_index:detection_index + 1])
+                candidates.append(Candidate(f"sam{index:04d}-{detection_index:04d}", box,
                                             ("SAM:" + phrase,), sam_prompt=phrase,
-                                            localization=detections))
+                                            localization=localization))
         candidates = merge_candidates([], candidates)
         root_box = (0, 0, *image.size)
         for candidate in candidates:

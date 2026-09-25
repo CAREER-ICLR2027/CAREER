@@ -162,6 +162,16 @@ def test_first_local_view_accepts_no_without_generator_agreement_or_extra_gates(
     )
 
 
+def test_first_local_view_uses_highest_ranked_joint_atlas_candidate():
+    sam = candidate("sam", score=1, source="SAM")
+    sgap = candidate("sgap", (50, 50, 20, 20), score=2)
+    generator = Model([answer(), completion(json.dumps(PLAN)), answer()])
+    verifier = Model([support(.8), support(.1)])
+    result = run(generator, verifier, Frontend(initial=[sam], candidates=[sgap]), max_observations=1)
+    assert result["status"] == "verified"
+    assert result["views"][1]["candidate_id"] == "sgap"
+
+
 def test_initial_atlas_then_next_keep_all_images_and_previous_feedback():
     a = candidate("a", (0, 0, 20, 20), score=3, source="SAM")
     b = candidate("b", (30, 0, 20, 20), score=2)
