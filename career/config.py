@@ -17,7 +17,7 @@ class SearchConfig:
     absolute_support: float = 0.65
     relative_margin: float = 0.15
     support_improvement: float = 0.01
-    margin_improvement: float = 0.01
+    relative_support_improvement: float = 0.01
     stagnation_patience: int = 2
 
     def __post_init__(self):
@@ -30,7 +30,7 @@ class SearchConfig:
                 raise ValueError(f"{name} must be a positive integer")
         if type(self.max_observations) is not int or self.max_observations < 0:
             raise ValueError("max_observations must be a nonnegative integer")
-        for name in ("support_improvement", "margin_improvement"):
+        for name in ("support_improvement", "relative_support_improvement"):
             if not math.isfinite(getattr(self, name)) or getattr(self, name) < 0:
                 raise ValueError(f"{name} must be finite and nonnegative")
 

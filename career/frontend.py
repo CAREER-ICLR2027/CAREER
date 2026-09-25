@@ -213,7 +213,7 @@ class CandidateFrontend:
         root_box = (0, 0, *image.size)
         for candidate in candidates:
             candidate.visited = candidate.box == root_box
-        return self._rank(image, candidates, question, phrases)
+        return candidates
 
     def build_candidates(self, image, sam_candidates, question, phrases):
         from .sgap import ConstrainedTreeBuilder
@@ -241,9 +241,4 @@ class CandidateFrontend:
             return candidate.id
 
         visit(root)
-        # Include screened SAM geometry for inherited visit history, but keep only
-        # unvisited SAM-only records in the formal candidate pool.
-        merged = merge_candidates(candidates, sam_candidates)
-        history = [c for c in merged if "SGAP" not in c.sources and c.visited]
-        active = [c for c in merged if "SGAP" in c.sources or not c.visited]
-        return self._rank(image, active, question, phrases) + history
+        return self._rank(image, merge_candidates(candidates, sam_candidates), question, phrases)

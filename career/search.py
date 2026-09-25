@@ -1,4 +1,4 @@
-"""CAREER inference: accumulated views, independent verification, then navigation."""
+"""CAREER inference: joint candidate atlas, navigation, then independent verification."""
 
 from collections.abc import Mapping
 import json
@@ -218,7 +218,6 @@ class _Search:
                             "box": list(view.box)})
 
     def _evaluate(self):
-        self._answer()
         feedback, log_supports = [], []
         self.feedback = feedback
         images = [view.image for view in self.views]
@@ -241,6 +240,8 @@ class _Search:
                 self.events.append({"kind": "semantic-feedback-omitted", "option_id": code,
                                     "view_id": self.views[-1].id})
             feedback.append({"option_id": code, "support": probabilities[0],
+                             "source_round": self.observations,
+                             "source_view_ids": [view.id for view in self.views],
                              "decision_logits": list(result.first_token_logits),
                              "decoded_code": decoded_code,
                              "explanation_available": valid, "invalid_records": invalid,
@@ -255,15 +256,15 @@ class _Search:
         self.feedback = feedback
         for index, record in enumerate(feedback):
             record["relative_support"] = relative[index]
-        code, support = self.codes[leader], feedback[leader]["support"]
+        code, support, share = self.codes[leader], feedback[leader]["support"], relative[leader]
         self.events.append({"kind": "verification", "view_id": self.views[-1].id,
                             "leader": code, "support": support, "margin": margin})
         if support >= self.config.absolute_support and margin >= self.config.relative_margin:
             return code, False
-        current = (code, support, margin)
-        if self.baseline is not None and self.baseline[0] == code:
-            stalled = (support - self.baseline[1] <= self.config.support_improvement
-                       and margin - self.baseline[2] <= self.config.margin_improvement)
+        current = (support, share)
+        if self.baseline is not None:
+            stalled = (support - self.baseline[0] < self.config.support_improvement
+                       and share - self.baseline[1] < self.config.relative_support_improvement)
             self.stalls = self.stalls + 1 if stalled else 0
         else:
             self.stalls = 0
@@ -292,7 +293,7 @@ class _Search:
         return pairs
 
     def _recover(self):
-        self.baseline, self.stalls = None, 0
+        self.stalls = 0
         previous = self.focus
         for index in range(self.focus_index - 1, -1, -1):
             focus = self.history[index]
@@ -310,9 +311,9 @@ class _Search:
             return [{"action": "NEXT", "candidate_id": candidate.id}], "next"
         return [], "local"
 
-    def _navigation(self, legal):
+    def _navigation(self, legal, feedback):
         prompt = navigation_prompt(
-            self.question, self.options, self.views, self.requirements, self.feedback,
+            self.question, self.options, self.views, self.requirements, feedback,
             {"candidate_id": self.focus[0], "box": list(self.focus[1])}, legal,
             self.failed, self.config.max_observations - self.observations,
         )
@@ -379,16 +380,16 @@ class _Search:
         if not self._fits(self.views + [view]):
             return "capacity"
         self._append(candidate, view)
-        if action == "NEXT":
-            self.baseline, self.stalls = None, 0
         return None
 
-    def _next_observation(self, stalled):
+    def _next_observation(self, stalled, proposal, feedback):
         legal, mode = self._legal(self.focus), "normal"
         if stalled or not legal:
             legal, mode = self._recover()
+            proposal = None
         while legal:
-            proposal = self._navigation(legal)
+            if proposal is None:
+                proposal = self._navigation(legal, feedback)
             failed_focus = self.focus
             failure = self._execute(proposal)
             if failure is None:
@@ -398,6 +399,7 @@ class _Search:
                       "reason": failure}
             self.failed.append(record)
             self.events.append({"kind": "failed-attempt", **record})
+            proposal = None
             legal = self._legal(self.focus, local_only=mode == "local")
             if mode == "next":
                 legal = [pair for pair in legal if pair["action"] == "NEXT"]
@@ -420,35 +422,28 @@ class _Search:
             phrases, self.requirements = _plan(output.text)
             self.events.append({"kind": "initial-candidates"})
             sam_candidates = self.frontend.initial_candidates(self.image, phrases, self.question)
-            self.candidates = {candidate.id: candidate for candidate in sam_candidates}
-            candidate = self._best_candidate(self.candidates, "SAM")
-            if candidate is not None:
-                self._append(candidate, self._candidate_view(candidate, "SAM"))
-                accepted, _ = self._evaluate()
-                if accepted is not None:
-                    return self._result(accepted, "verified", "verifier-gate")
-            reason = self._room()
-            if reason:
-                return self._fallback(reason)
             self.events.append({"kind": "build-candidates"})
             built = self.frontend.build_candidates(self.image, sam_candidates, self.question, phrases)
             self.candidates = {candidate.id: candidate for candidate in built}
-            by_box = {candidate.box: candidate.id for candidate in built}
-            self.history = [(by_box.get(box, identifier), box) for identifier, box in self.history]
-            self.history = [focus for focus in self.history if focus[0] in self.candidates]
-            self.baseline, self.stalls = None, 0
             candidate = self._best_candidate(self.candidates, "INIT")
             if candidate is None:
                 return self._fallback("feasibility")
             self._append(candidate, self._candidate_view(candidate, "INIT"))
             while True:
+                self._answer()
+                previous_feedback = self.feedback
+                proposal = None
+                reason = self._room()
+                if reason is None:
+                    legal = self._legal(self.focus)
+                    if legal:
+                        proposal = self._navigation(legal, previous_feedback)
                 accepted, stalled = self._evaluate()
                 if accepted is not None:
                     return self._result(accepted, "verified", "verifier-gate")
-                reason = self._room()
                 if reason:
                     return self._fallback(reason)
-                if not self._next_observation(stalled):
+                if not self._next_observation(stalled, proposal, previous_feedback):
                     return self._fallback("feasibility")
         except (OutputError, CapacityError) as error:
             if self.saved_global is None:
