@@ -23,4 +23,5 @@ dist/
 *.pt
 *.pth
 *.bin
-/ICLR27_CAREER.pdf
+/ICLR27_*.pdf
+/Method.pdf

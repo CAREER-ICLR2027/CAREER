@@ -156,6 +156,8 @@ class _Search:
         if self.saved_global is None:
             self.saved_global = code
         probabilities, _ = _probabilities(result.first_token_logits, self.codes)
+        if self.observations == 0:
+            self.saved_global = self.codes[max(range(len(self.codes)), key=probabilities.__getitem__)]
         self.calls[-1].update(codes=list(self.codes), decision_logits=list(result.first_token_logits))
         return code, probabilities
 
@@ -409,7 +411,7 @@ class _Search:
 
     def run(self):
         try:
-            self.saved_global, probabilities = self._answer()
+            _, probabilities = self._answer()
             order = sorted(range(len(self.codes)), key=lambda index: -probabilities[index])
             if (probabilities[order[0]] >= self.config.global_confidence
                     and probabilities[order[0]] - probabilities[order[1]] >= self.config.global_margin):

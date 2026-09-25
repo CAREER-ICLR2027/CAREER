@@ -34,19 +34,6 @@ Download model checkpoints from their official model pages and keep them outside
 | Image segmentation | [SAM 3](https://github.com/facebookresearch/sam3) |
 | Text-image features | [CLIP ViT-L/14](https://huggingface.co/openai/clip-vit-large-patch14) |
 
-## Benchmark Data
-
-The paper evaluates CAREER on V*Bench, HR-Bench 4K/8K, and POPE-COCO. Download benchmark files and images from their project pages:
-
-| Dataset | Download |
-| --- | --- |
-| V*Bench | [Hugging Face dataset](https://huggingface.co/datasets/craigwu/vstar_bench) |
-| HR-Bench 4K/8K | [Hugging Face dataset](https://huggingface.co/datasets/DreamMr/HR-Bench) · [project page](https://github.com/DreamMr/HR-Bench) |
-| POPE-COCO questions | [Official POPE repository](https://github.com/AoiDragon/POPE) |
-| COCO 2014 validation images for POPE | [COCO download page](https://cocodataset.org/#download) |
-
-Keep downloaded datasets outside the source tree.
-
 ## Repository Structure
 
 | Path | Description |

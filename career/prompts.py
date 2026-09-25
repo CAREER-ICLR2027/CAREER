@@ -1,4 +1,4 @@
-"""CAREER Appendix D interfaces; task inputs are serialized separately."""
+"""CAREER Appendix E interfaces; task inputs are serialized separately."""
 
 import json
 

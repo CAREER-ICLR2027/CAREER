@@ -21,7 +21,9 @@ def completion(text, probabilities=None):
     return Completion(text, logits, 1 if probabilities is not None else 12, 10, 4)
 
 
-def answer(code="A", probabilities=(0.55, 0.45)):
+def answer(code="A", probabilities=None):
+    if probabilities is None:
+        probabilities = (0.55, 0.45) if code == "A" else (0.45, 0.55)
     return completion(code, probabilities)
 
 
@@ -69,9 +71,10 @@ class Frontend:
     def build_candidates(self, image, sam_candidates, question, phrases):
         self.calls.append(("build",))
         visited_boxes = {c.box for c in sam_candidates if c.visited}
-        for candidate in self.candidates:
+        combined = {candidate.id: candidate for candidate in [*sam_candidates, *self.candidates]}
+        for candidate in combined.values():
             candidate.visited |= candidate.box in visited_boxes
-        return self.candidates
+        return list(combined.values())
 
     def localize(self, image, phrase):
         self.calls.append(("localize", image.size, phrase))
@@ -96,7 +99,7 @@ def candidate(identifier, box=(10, 10, 30, 30), score=1, children=(), source="SG
 
 @pytest.mark.parametrize("budget,probabilities,status,expected", [
     (8, (.95, .05), "global-screened", "A"),
-    (0, (.55, .45), "unverified fallback", "B"),
+    (0, (.45, .55), "unverified fallback", "B"),
 ])
 def test_global_gate_and_zero_budget_skip_all_planning_and_verification(
     budget, probabilities, status, expected,
@@ -130,14 +133,20 @@ def test_invalid_global_logits_fall_back_after_saving_a_valid_generated_answer()
     assert verifier.calls == frontend.calls == []
 
 
+def test_saved_global_answer_uses_leading_logit_option():
+    generator = Model([answer("B", (.6, .4))])
+    result = run(generator, Model([]), Frontend(), max_observations=0)
+    assert (result["option_id"], result["reason"]) == ("A", "budget")
+
+
 @pytest.mark.parametrize("explanation", ["A\nnot-json", "A {bad JSON"])
-def test_one_screening_view_accepts_no_without_generator_agreement_or_extra_gates(explanation):
+def test_first_local_view_accepts_no_without_generator_agreement_or_extra_gates(explanation):
     generator = Model([answer(), completion(json.dumps(PLAN)), answer("A")])
     verifier = Model([support(.1), support(.8, explanation)])
     frontend = Frontend(initial=[candidate("sam", source="SAM")])
-    result = run(generator, verifier, frontend)
+    result = run(generator, verifier, frontend, max_observations=1)
     assert (result["status"], result["option_id"], result["observations"]) == ("verified", "B", 1)
-    assert [call[0] for call in frontend.calls] == ["initial"]
+    assert [call[0] for call in frontend.calls] == ["initial", "build"]
     assert generator.calls[1]["images"] == []
     assert generator.calls[1]["inputs"] == {"question": "Is there a sign?"}
     assert all(len(call["images"]) == 2 for call in verifier.calls)
@@ -153,25 +162,25 @@ def test_one_screening_view_accepts_no_without_generator_agreement_or_extra_gate
     )
 
 
-def test_screening_then_init_then_next_keep_all_images_and_current_feedback():
+def test_initial_atlas_then_next_keep_all_images_and_previous_feedback():
     a = candidate("a", (0, 0, 20, 20), score=3, source="SAM")
     b = candidate("b", (30, 0, 20, 20), score=2)
     c = candidate("c", (60, 0, 20, 20), score=1)
-    generator = Model([answer(), completion(json.dumps(PLAN)), answer(), answer(),
-                       navigate("NEXT", "c"), answer()])
+    generator = Model([answer(), completion(json.dumps(PLAN)), answer(),
+                       navigate("NEXT", "b"), answer(), navigate("NEXT", "c"), answer()])
     verifier = Model([support(.3), support(.4), support(.4), support(.3),
                       support(.8), support(.1)])
     frontend = Frontend([a], [a, b, c])
-    result = run(generator, verifier, frontend)
+    result = run(generator, verifier, frontend, max_observations=3)
     assert result["status"] == "verified"
     assert result["observations"] == 3
     assert [v["candidate_id"] for v in result["views"]] == [None, "a", "b", "c"]
     assert [len(call["images"]) for call in verifier.calls] == [2, 2, 3, 3, 4, 4]
     navigation = generator.calls[-2]["inputs"]
-    assert navigation["feedback"][0]["support"] == pytest.approx(.4)
-    assert navigation["feedback"][1]["support"] == pytest.approx(.3)
+    assert navigation["feedback"][0]["support"] == pytest.approx(.3)
+    assert navigation["feedback"][1]["support"] == pytest.approx(.4)
     assert [v["id"] for v in navigation["views"]] == ["v0", "v1", "v2"]
-    assert navigation["remaining_views"] == 6
+    assert navigation["remaining_views"] == 1
 
 
 def test_failed_zoom_replans_with_same_feedback_without_spending_an_observation():
@@ -201,6 +210,7 @@ def test_stagnation_restores_most_recent_expandable_focus_with_complete_evidence
     generator = Model([answer("B"), completion(json.dumps(PLAN)), answer(),
                        navigate("ZOOM", "a", "sign"), answer(),
                        navigate("ZOOM", "a", "letter"), answer(),
+                       navigate("EXPAND", "a", "wall"),
                        navigate("EXPAND", "a", "wall"), answer()])
     verifier = Model([support(.4), support(.3)] * 3 + [support(.8), support(.1)])
     frontend = Frontend(candidates=[candidate("a")], localizations=[
@@ -236,15 +246,15 @@ def test_output_errors_end_search_immediately_without_hidden_retries(failure):
     outputs = [answer("B"), completion("bad-json" if failure == "planner" else json.dumps(PLAN))]
     if failure != "planner":
         outputs.append(answer())
-    if failure == "navigation":
-        outputs.append(navigate("RECOVER", "a"))
+    if failure in {"navigation", "verifier"}:
+        outputs.append(navigate("RECOVER" if failure == "navigation" else "ZOOM", "a", "sign"))
     generator = Model(outputs)
     scores = [support(.4), support(.3)]
     if failure == "verifier":
         scores[0] = Completion("A", (float("nan"), 0., 1.), 1, 10, 4)
     verifier = Model([] if failure == "planner" else scores)
     frontend = Frontend(candidates=[candidate("a")])
-    result = run(generator, verifier, frontend)
+    result = run(generator, verifier, frontend, max_observations=2)
     assert result["status"] == "unverified fallback"
     assert result["option_id"] == "B"
     assert result["reason"] == "output-error"
@@ -295,7 +305,7 @@ def test_split_and_next_offer_fixed_best_destinations_from_distinct_ranges():
                        navigate("SPLIT", "child_high"), answer()])
     verifier = Model([support(.4), support(.3), support(.8), support(.1)])
     frontend = Frontend(candidates=[a, child_low, outside, child_high])
-    result = run(generator, verifier, frontend)
+    result = run(generator, verifier, frontend, max_observations=2)
     legal = generator.calls[-2]["inputs"]["legal_pairs"]
     assert {pair["action"]: pair["candidate_id"] for pair in legal} == {
         "ZOOM": "a", "EXPAND": "a", "SPLIT": "child_high", "NEXT": "outside",
@@ -312,7 +322,7 @@ def test_both_models_receive_all_views_until_actual_capacity_stops_search():
     assert (result["reason"], result["option_id"], result["observations"]) == ("capacity", "B", 1)
     assert [len(call["images"]) for call in verifier.calls] == [2, 2]
     assert [v["id"] for v in result["views"]] == ["v0", "v1"]
-    assert [call[0] for call in frontend.calls] == ["initial"]
+    assert [call[0] for call in frontend.calls] == ["initial", "build"]
 
 
 def test_semantic_feedback_only_keeps_supplied_view_and_requirement_citations():
@@ -320,11 +330,13 @@ def test_semantic_feedback_only_keeps_supplied_view_and_requirement_citations():
     invalid = {"requirement_id": "r1", "view_ids": ["future-view"], "fact": "Invented"}
     semantic = "A\n" + json.dumps({"grounded": [valid, invalid], "missing": []})
     generator = Model([answer(), completion(json.dumps(PLAN)), answer(),
-                       navigate("NEXT", "b"), answer()])
-    verifier = Model([support(.4, semantic), support(.3), support(.8), support(.1)])
-    frontend = Frontend(candidates=[candidate("a", score=2), candidate("b", (60, 60, 20, 20))])
-    result = run(generator, verifier, frontend)
-    feedback = generator.calls[-2]["inputs"]["feedback"]
+                       navigate("NEXT", "b"), answer(), navigate("NEXT", "c"), answer()])
+    verifier = Model([support(.4, semantic), support(.3), support(.4), support(.3),
+                      support(.8), support(.1)])
+    frontend = Frontend(candidates=[candidate("a", score=3), candidate("b", (60, 60, 20, 20), score=2),
+                                    candidate("c", (60, 10, 20, 20))])
+    result = run(generator, verifier, frontend, max_observations=3)
+    feedback = generator.calls[5]["inputs"]["feedback"]
     assert feedback[0]["grounded"] == [valid]
     assert feedback[0]["explanation_available"] is False
     assert feedback[0]["invalid_records"] == [{"kind": "grounded", "index": 1}]

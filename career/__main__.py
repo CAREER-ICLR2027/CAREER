@@ -1,4 +1,4 @@
-"""Run CAREER on one image using the method in ICLR27_CAREER.pdf."""
+"""Run CAREER on one image using the manuscript method."""
 
 import argparse
 from contextlib import redirect_stdout

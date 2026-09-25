@@ -1,4 +1,4 @@
-"""Paper §3.6 / B.3: cached SAM localization, fixed SGAP atlas and ranking."""
+"""Paper §3.2 and Appendix C.3: SAM localization, SGAP atlas and ranking."""
 
 from dataclasses import replace
 import hashlib
@@ -97,14 +97,6 @@ class CLIP:
             return (images @ query).cpu().numpy()
 
 
-def minmax(values):
-    values = np.asarray(values, dtype=np.float64)
-    if not np.isfinite(values).all():
-        raise ValueError("ranking components must be finite")
-    low, high = values.min(), values.max()
-    return (values - low) / (high - low) if high > low else np.zeros_like(values)
-
-
 def feature_dispersion(features, box, image_size):
     """Average cosine distance to the regional mean at receptive-field centers."""
     channels, height, width = features.shape
@@ -192,7 +184,10 @@ class CandidateFrontend:
         if not feasible:
             return []
         relevance = self.clip.relevance(crops, [question, *phrases])
-        scores = 0.70 * minmax(relevance) + 0.30 * (0.50 * minmax(dispersions) + 0.50 * minmax(edges))
+        scores = 0.70 * np.asarray(relevance) + 0.30 * (
+            0.50 * np.asarray(dispersions) + 0.50 * np.asarray(edges))
+        if not np.isfinite(scores).all():
+            raise ValueError("ranking components must be finite")
         ids = {candidate.id for candidate in feasible}
         for candidate, score in zip(feasible, scores):
             candidate.score = float(score)

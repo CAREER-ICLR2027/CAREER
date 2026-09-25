@@ -4,15 +4,26 @@ import numpy as np
 from PIL import Image
 import pytest
 
-from career.frontend import CandidateFrontend, CLIP, SAM, edge_density, feature_dispersion, merge_candidates, minmax
+from career.frontend import CandidateFrontend, CLIP, SAM, edge_density, feature_dispersion, merge_candidates
 from career.types import Candidate, Localization
 
 
-def test_ranking_uses_minmax_and_constant_components_are_zero():
-    assert minmax([2, 3, 12]).tolist() == [0, .1, 1]
-    assert minmax([5, 5]).tolist() == [0, 0]
-    with pytest.raises(ValueError):
-        minmax([0, float("nan")])
+def test_ranking_uses_raw_components_from_paper_equation_five(monkeypatch):
+    from career import frontend
+
+    monkeypatch.setattr(frontend, "feature_dispersion", lambda features, box, size: box[0] / 10)
+    monkeypatch.setattr(frontend, "edge_density", lambda crop, size, interpolation: 0.)
+    clip = SimpleNamespace(relevance=lambda images, texts: np.array([.6, .5]))
+    settings = SimpleNamespace(edge_size=(8, 8), edge_interpolation="bilinear")
+    front = CandidateFrontend(None, clip, settings)
+    image = Image.new("RGB", (30, 10))
+    candidates = [Candidate("first", (0, 0, 10, 10), ("SAM",)),
+                  Candidate("second", (10, 0, 10, 10), ("SAM",))]
+
+    ranked = front._rank(image, candidates, "question", [])
+
+    assert [candidate.id for candidate in ranked] == ["second", "first"]
+    assert [candidate.score for candidate in ranked] == pytest.approx([.5, .42])
 
 
 def test_feature_dispersion_selects_centers_and_average_cosine_distance():
