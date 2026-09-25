@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 
 class ConstrainedTreeBuilder:
-    def __init__(self, feature_map, n_atoms=400, pos_weight=2.0, split_threshold=0.3, keep_threshold=0.05, use_local_normalization=True,
+    def __init__(self, feature_map, n_atoms=600, pos_weight=3.5, split_threshold=0.3, keep_threshold=0.15, use_local_normalization=True,
                  use_silhouette_score=True):
         if isinstance(feature_map, torch.Tensor):
             self.feat = feature_map.detach().cpu().numpy()

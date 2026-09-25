@@ -116,3 +116,12 @@ def test_sgap_keeps_zero_distance_neighbors_and_handles_a_single_atom():
     uniform = ConstrainedTreeBuilder(np.ones((3, 4, 4)), n_atoms=16)
     assert uniform.adj_matrix.nnz > 0
     assert uniform.build_tree(max_depth=1)["children"] == []
+
+
+def test_sgap_builder_defaults_match_manuscript_constants():
+    from career.sgap import ConstrainedTreeBuilder
+
+    builder = ConstrainedTreeBuilder(np.ones((3, 1, 1)))
+    assert (builder.n_atoms, builder.pos_weight, builder.split_threshold,
+            builder.keep_threshold, builder.use_local_normalization,
+            builder.use_silhouette_score) == (600, 3.5, .30, .15, True, True)

@@ -51,7 +51,7 @@ def main(argv=None):
         with torch.inference_mode():
             result = run_search(image, args.question.strip(), options, generator=generator,
                                 verifier=verifier, frontend=frontend, config=config.search)
-    # A single answer record; no dataset runners, performance reports or saved logs.
+    # Print only the answer summary.
     print(json.dumps({key: result[key] for key in ("answer", "option_id", "status", "reason", "observations")},
                      ensure_ascii=False, allow_nan=False))
     return 0
