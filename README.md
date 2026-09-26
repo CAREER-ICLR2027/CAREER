@@ -2,7 +2,7 @@
 
 **Multi-Granularity Visual Search with Verification Feedback** is a training-free method for high-resolution visual question answering. CAREER combines whole-image prediction with local visual search and verification feedback. When more visual evidence is needed, it uses SAM 3 and SGAP to obtain informative image regions.
 
-This repository contains the CAREER inference code, model adapters, prompts, and method documentation.
+This repository contains the CAREER inference code, model adapters, and prompts.
 
 ## Overview
 
@@ -43,7 +43,6 @@ Download model checkpoints from their official model pages and keep them outside
 | `career/models.py` | Vision-language model adapters |
 | `career/prompts.py` | Planning, navigation, answering, and verification prompts |
 | `career/config.py` | Search and runtime configuration |
-| `docs/appendix.md` | Method details and implementation mapping |
 | `tests/` | Functional tests |
 
 ## Acknowledgements

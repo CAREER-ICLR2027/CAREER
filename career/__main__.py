@@ -1,5 +1,3 @@
-"""Run CAREER on one image using the manuscript method."""
-
 import argparse
 from contextlib import redirect_stdout
 import json
@@ -8,16 +6,16 @@ import sys
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description="Run CAREER on one image.")
     parser.add_argument("--image", type=Path, required=True)
     parser.add_argument("--question", required=True)
     parser.add_argument("--options", nargs="+", required=True)
     parser.add_argument("--generator", type=Path, required=True)
-    parser.add_argument("--verifier", type=Path, required=True, help="paper default: Qwen3-VL-4B-Instruct")
+    parser.add_argument("--verifier", type=Path, required=True, help="verifier checkpoint")
     parser.add_argument("--sam", type=Path, required=True)
     parser.add_argument("--clip", type=Path, required=True)
     parser.add_argument("--runtime-config", type=Path, required=True,
-                        help="fixed run settings whose values are omitted from the paper; see docs/appendix.md")
+                        help="path to runtime settings JSON")
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--verifier-device", default=None)
     args = parser.parse_args(argv)
@@ -51,7 +49,6 @@ def main(argv=None):
         with torch.inference_mode():
             result = run_search(image, args.question.strip(), options, generator=generator,
                                 verifier=verifier, frontend=frontend, config=config.search)
-    # Print only the answer summary.
     print(json.dumps({key: result[key] for key in ("answer", "option_id", "status", "reason", "observations")},
                      ensure_ascii=False, allow_nan=False))
     return 0

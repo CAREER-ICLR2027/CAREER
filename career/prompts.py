@@ -1,5 +1,3 @@
-"""CAREER Appendix E interfaces; task inputs are serialized separately."""
-
 import json
 
 

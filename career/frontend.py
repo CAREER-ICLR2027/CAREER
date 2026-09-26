@@ -1,5 +1,3 @@
-"""Paper §3.2 and Appendix C.3: SAM localization, SGAP atlas and ranking."""
-
 from dataclasses import replace
 import hashlib
 import math

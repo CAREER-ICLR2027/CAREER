@@ -1,5 +1,3 @@
-"""Paper constants and explicit run settings omitted from the manuscript."""
-
 from dataclasses import dataclass
 import json
 import math
